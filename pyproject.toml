@@ -1,13 +1,40 @@
 [project]
-name = "hugsncuddles"
+name = "graft"
 version = "0.1.0"
-description = "Add your description here"
+description = "Graft dependency upgrade agent"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 dependencies = [
-    "deepagents>=0.5.6",
-    "dotenv>=0.9.9",
-    "langchain>=1.2.17",
-    "langchain-openai>=1.2.1",
-    "langgraph>=1.1.10",
+    "langgraph>=1.0",
+    "langchain-openai",
+    "fastapi",
+    "uvicorn[standard]",
+    "arq",
+    "redis",
+    "asyncpg",
+    "psycopg[binary]",
+    "langgraph-checkpoint-postgres",
+    "openai",
+    "pydantic-settings",
+    "python-frontmatter",
+    "tree-sitter>=0.23",
+    "tree-sitter-python>=0.23",
+    "libcst",
+    "gitpython",
+    "httpx",
+    "e2b-code-interpreter",
+    "langsmith",
+]
+
+[project.optional-dependencies]
+training = [
+    "torch>=2.3",
+    "transformers>=4.47",
+    "trl>=0.12",
+    "peft>=0.13",
+    "datasets",
+    "accelerate",
+    "bitsandbytes",
+    "flash-attn",
+    "gymnasium",
 ]
