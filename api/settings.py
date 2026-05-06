@@ -16,6 +16,13 @@ class Settings(BaseSettings):
     github_app_private_key: str
     github_installation_id: str
 
+    # PAT for reading public repos/releases (avoids 60 req/hr rate limit)
+    # Generate at: GitHub → Settings → Developer settings → PATs (classic), scope: public_repo
+    github_token: str | None = None
+
+    # e2b sandbox API key — https://e2b.dev/dashboard → API Keys
+    e2b_api_key: str | None = None
+
     sandbox_backend: str = "e2b"
 
     enable_training: bool = True

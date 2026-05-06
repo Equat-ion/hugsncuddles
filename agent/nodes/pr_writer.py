@@ -16,5 +16,11 @@ def run(state: GraftState):
 
 > This PR was created by Graft. All changes require manual review before merging.
 """
-    pr_url = create_github_pr("repo", "graft/auto", "Graft update", pr_body)
+    pr_url = create_github_pr(
+        repo=state["repo_path"],          # expects "owner/repo" format
+        branch=f"graft/upgrade-{state['dep_name'].replace('/', '-')}-{state['new_version']}",
+        title=f"graft: upgrade {state['dep_name']} {state['old_version']} → {state['new_version']}",
+        body=pr_body,
+        file_changes=state.get("current_diff"),
+    )
     return {"pr_body": pr_body, "pr_url": pr_url, "status": "success"}
