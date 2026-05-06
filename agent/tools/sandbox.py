@@ -33,6 +33,7 @@ from api.settings import settings
 
 # Directories to exclude when zipping the repo
 _EXCLUDE_DIRS = {".git", "__pycache__", ".venv", ".mypy_cache", ".pytest_cache", "node_modules"}
+_EXCLUDE_FILES = {".env", ".env.local", ".env.production", ".env.development"}
 _EXCLUDE_SUFFIXES = {".pyc", ".pyo"}
 
 
@@ -42,6 +43,9 @@ def _zip_repo(repo_path: str) -> bytes:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         for path in root.rglob("*"):
+            # Skip excluded files
+            if path.name in _EXCLUDE_FILES:
+                continue
             # Skip excluded directories anywhere in the path
             if any(part in _EXCLUDE_DIRS for part in path.parts):
                 continue

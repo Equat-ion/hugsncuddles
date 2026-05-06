@@ -5,7 +5,11 @@ from agent.llm import call_llm
 from agent.tools.sandbox import run_tests
 
 
-async def run(state: GraftState):
+async def run(state: GraftState, run_tests=None):
+    if run_tests is None:
+        from agent.tools.sandbox import run_tests as default_run_tests
+        run_tests = default_run_tests
+
     system, _meta = load_prompt("test_auditor")
     prompt = json.dumps(
         {
