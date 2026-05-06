@@ -123,7 +123,8 @@ def run_tests(repo_path: str, test_filter: str | None = None) -> SandboxResult:
     # 1. Zip repo
     zip_bytes = _zip_repo(repo_path)
 
-    with Sandbox(api_key=api_key) as sandbox:
+    sandbox = Sandbox.create(api_key=api_key)
+    try:
         # 2. Upload zip
         sandbox.files.write("/home/user/repo.zip", zip_bytes)
 
@@ -160,21 +161,15 @@ subprocess.run(
         )
 
         # 6. Build pytest command
-        pytest_cmd = [
-            "sys.executable, '-m', 'pytest'",
-            "'/home/user/repo'",
-            "'--json-report'",
-            "'--json-report-file=/tmp/report.json'",
-            "'-q', '--tb=short'",
-        ]
-        if test_filter:
-            pytest_cmd.append(f"'-k', {repr(test_filter)}")
+        extra_args = f", '-k', {repr(test_filter)}" if test_filter else ""
 
         run_result = sandbox.run_code(
             f"""
 import subprocess, sys
 result = subprocess.run(
-    [{', '.join(pytest_cmd)}],
+    [sys.executable, '-m', 'pytest', '/home/user/repo',
+     '--json-report', '--json-report-file=/tmp/report.json',
+     '-q', '--tb=short'{extra_args}],
     capture_output=True, text=True, cwd='/home/user/repo'
 )
 print(result.stdout)
@@ -195,11 +190,13 @@ except FileNotFoundError:
             language="python",
         )
 
-    report_json = "\n".join(report_result.logs.stdout).strip()
-    result = _parse_json_report(report_json)
+        report_json = "\n".join(report_result.logs.stdout).strip()
+        result = _parse_json_report(report_json)
 
-    # Patch duration if JSON report had 0 (e.g. parse error)
-    if result["duration_ms"] == 0:
-        result = SandboxResult(**{**result, "duration_ms": int((time.time() - start) * 1000)})
+        # Patch duration if JSON report had 0 (e.g. parse error)
+        if result["duration_ms"] == 0:
+            result = SandboxResult(**{**result, "duration_ms": int((time.time() - start) * 1000)})
 
-    return result
+        return result
+    finally:
+        sandbox.kill()

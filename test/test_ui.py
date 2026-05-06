@@ -38,6 +38,8 @@ from textual.widgets import (
     RichLog,
     Rule,
     Static,
+    TabbedContent,
+    TabPane,
 )
 
 # ── colour palette (used in CSS) ────────────────────────────────────────────
@@ -85,14 +87,20 @@ Button {
     min-width: 20;
 }
 
-#btn-registry  { background: #1a6b9a; }
-#btn-sandbox   { background: #1a7a4a; }
-#btn-github    { background: #7a3a8a; }
-#btn-clear     { background: $surface-darken-2; }
+#btn-registry    { background: #1a6b9a; }
+#btn-sandbox     { background: #1a7a4a; }
+#btn-github      { background: #7a3a8a; }
+#btn-clear       { background: $surface-darken-2; }
+#btn-agent-reader  { background: #3a5a8a; }
+#btn-agent-llm     { background: #5a3a8a; }
+#btn-agent-graph   { background: #8a5a1a; }
 
-#btn-registry:hover  { background: #2080bb; }
-#btn-sandbox:hover   { background: #20944a; }
-#btn-github:hover    { background: #9340aa; }
+#btn-registry:hover    { background: #2080bb; }
+#btn-sandbox:hover     { background: #20944a; }
+#btn-github:hover      { background: #9340aa; }
+#btn-agent-reader:hover  { background: #4a70aa; }
+#btn-agent-llm:hover     { background: #7a4aaa; }
+#btn-agent-graph:hover   { background: #aa7a2a; }
 
 #log-container {
     border: round $accent 50%;
@@ -151,11 +159,19 @@ class GraftTestUI(App):
                 yield Label("GitHub repo:", classes="label")
                 yield Input(value="", id="inp-gh-repo", placeholder="owner/repo  (for GitHub test)")
 
-        with Horizontal(id="buttons"):
-            yield Button("① Registry", id="btn-registry", variant="primary")
-            yield Button("② Sandbox", id="btn-sandbox", variant="success")
-            yield Button("③ GitHub App", id="btn-github", variant="warning")
-            yield Button("✕ Clear", id="btn-clear", variant="default")
+        with TabbedContent():
+            with TabPane("Backends", id="tab-backends"):
+                with Horizontal(id="buttons"):
+                    yield Button("① Registry", id="btn-registry", variant="primary")
+                    yield Button("② Sandbox", id="btn-sandbox", variant="success")
+                    yield Button("③ GitHub App", id="btn-github", variant="warning")
+                    yield Button("✕ Clear", id="btn-clear", variant="default")
+            with TabPane("Agent", id="tab-agent"):
+                with Horizontal(id="buttons-agent"):
+                    yield Button("④ Reader node", id="btn-agent-reader", variant="primary")
+                    yield Button("⑤ LLM ping", id="btn-agent-llm", variant="primary")
+                    yield Button("⑥ Graph dry-run", id="btn-agent-graph", variant="warning")
+                    yield Button("✕ Clear", id="btn-clear-agent", variant="default")
 
         with ScrollableContainer(id="log-container"):
             yield RichLog(id="log", highlight=True, markup=True)
@@ -205,9 +221,25 @@ class GraftTestUI(App):
             self._run_github_test()
 
     @on(Button.Pressed, "#btn-clear")
+    @on(Button.Pressed, "#btn-clear-agent")
     def action_clear_log(self) -> None:
-        self.query_one("#log", Log).clear()
+        self.query_one("#log", RichLog).clear()
         self._status("Log cleared.")
+
+    @on(Button.Pressed, "#btn-agent-reader")
+    def run_agent_reader(self) -> None:
+        if not self._busy:
+            self._run_agent_reader_test()
+
+    @on(Button.Pressed, "#btn-agent-llm")
+    def run_agent_llm(self) -> None:
+        if not self._busy:
+            self._run_agent_llm_test()
+
+    @on(Button.Pressed, "#btn-agent-graph")
+    def run_agent_graph(self) -> None:
+        if not self._busy:
+            self._run_agent_graph_test()
 
     # ── workers (run in background thread so TUI stays responsive) ────────────
 
@@ -338,8 +370,8 @@ class GraftTestUI(App):
             self._log(f"  [green]✓ App name        : {app.name}[/green]")
             self._log(f"  [green]✓ App slug        : {app.slug}[/green]")
 
-            self._log("  ↳ get_installation() …")
-            installation = gi.get_installation(int(settings.github_installation_id))
+            self._log("  ↳ get_app_installation() …")
+            installation = gi.get_app_installation(int(settings.github_installation_id))
             self._log(f"  [green]✓ Installation ID : {installation.id}[/green]")
             self._log(f"  [green]✓ Account         : {installation.account.login}[/green]")
 
@@ -362,6 +394,205 @@ class GraftTestUI(App):
             for ln in tb.splitlines():
                 self._log(f"  [red]{ln}[/red]")
             self._status("GitHub App: FAIL ✗ — see log")
+        finally:
+            self._set_busy(False)
+
+
+    # ── agent workers ──────────────────────────────────────────────────────────
+
+    @work(thread=True)
+    def _run_agent_reader_test(self) -> None:
+        """Test the reader node (deterministic — no LLM needed)."""
+        inp = self._inputs()
+        dep, old_v, new_v = inp["dep"], inp["old_v"], inp["new_v"]
+
+        self._set_busy(True)
+        self._log(
+            "",
+            "[bold blue]══ AGENT READER NODE TEST ══[/bold blue]",
+            f"  Package : [yellow]{dep}[/yellow]  {old_v} → {new_v}",
+        )
+        self._status("Agent/Reader: running …")
+
+        try:
+            from agent.state import GraftState
+            from agent.nodes import reader
+
+            state: GraftState = {
+                "job_id": "test-001",
+                "repo_path": inp["repo"],
+                "dep_name": dep,
+                "old_version": old_v,
+                "new_version": new_v,
+                "call_graph": [],
+                "dep_diff": "",
+                "migration_guide": "",
+                "migration_plan": [],
+                "breaking_change_count": 0,
+                "affected_file_count": 0,
+                "confidence_score": None,
+                "low_confidence": None,
+                "test_specs": [],
+                "baseline_result": {"passed": False, "total": 0, "failed_names": [], "errors": [], "stdout": "", "duration_ms": 0},
+                "test_results_current": {"passed": False, "total": 0, "failed_names": [], "errors": [], "stdout": "", "duration_ms": 0},
+                "current_diff": {},
+                "attempt_traces": [],
+                "retry_count": 0,
+                "status": "pending",
+                "pr_body": None,
+                "pr_url": None,
+                "messages": [],
+            }
+
+            self._log("  ↳ reader.run(state) …")
+            result = reader.run(state)
+
+            dep_diff = result.get("dep_diff", "")
+            guide = result.get("migration_guide", "")
+            self._log(f"  [green]✓ dep_diff     : {len(dep_diff)} chars[/green]")
+            self._log(f"  [green]✓ migration_guide: {len(guide)} chars[/green]")
+            self._log(f"  [green]✓ call_graph   : {len(result.get('call_graph', []))} entries[/green]")
+            self._log(f"  [green]✓ status       : {result.get('status')}[/green]")
+            for ln in dep_diff.splitlines()[:10]:
+                self._log(f"    [dim]{ln}[/dim]")
+            if dep_diff.count("\n") > 10:
+                self._log("    … (truncated)")
+
+            self._log("[bold green]  READER PASS ✓[/bold green]")
+            self._status("Agent/Reader: PASS ✓")
+
+        except Exception:
+            tb = traceback.format_exc()
+            self._log("[bold red]  READER FAIL ✗[/bold red]")
+            for ln in tb.splitlines():
+                self._log(f"  [red]{ln}[/red]")
+            self._status("Agent/Reader: FAIL ✗ — see log")
+        finally:
+            self._set_busy(False)
+
+    @work(thread=True)
+    def _run_agent_llm_test(self) -> None:
+        """Ping the LLM (call_llm with a trivial prompt)."""
+        import asyncio
+
+        self._set_busy(True)
+        self._log(
+            "",
+            "[bold magenta]══ AGENT LLM PING TEST ══[/bold magenta]",
+        )
+        self._status("Agent/LLM: pinging …")
+
+        try:
+            from api.settings import settings
+            from agent.llm import call_llm
+
+            self._log(f"  Model  : [yellow]{settings.llm_model}[/yellow]")
+            self._log(f"  URL    : [yellow]{settings.llm_base_url}[/yellow]")
+            self._log("  ↳ call_llm('hello') …")
+
+            reply = asyncio.run(
+                call_llm(
+                    prompt="Reply with exactly the word: PONG",
+                    system="You are a test echo server.",
+                    response_format=None,
+                )
+            )
+            self._log(f"  [green]✓ Reply ({len(reply or '')} chars): {(reply or '').strip()[:120]}[/green]")
+            self._log("[bold green]  LLM PING PASS ✓[/bold green]")
+            self._status("Agent/LLM: PASS ✓")
+
+        except Exception:
+            tb = traceback.format_exc()
+            self._log("[bold red]  LLM PING FAIL ✗[/bold red]")
+            for ln in tb.splitlines():
+                self._log(f"  [red]{ln}[/red]")
+            self._status("Agent/LLM: FAIL ✗ — see log")
+        finally:
+            self._set_busy(False)
+
+    @work(thread=True)
+    def _run_agent_graph_test(self) -> None:
+        """
+        Dry-run the full LangGraph pipeline up through the reader node only
+        (uses MemorySaver so no Redis/Postgres needed).
+        """
+        import asyncio
+        inp = self._inputs()
+        dep, old_v, new_v = inp["dep"], inp["old_v"], inp["new_v"]
+
+        self._set_busy(True)
+        self._log(
+            "",
+            "[bold yellow]══ AGENT GRAPH DRY-RUN TEST ══[/bold yellow]",
+            f"  Package: [yellow]{dep}[/yellow] {old_v} → {new_v}",
+            "  (Runs reader→planner only; stops before sandbox/coder)",
+        )
+        self._status("Agent/Graph: building graph …")
+
+        try:
+            from langgraph.checkpoint.memory import MemorySaver
+            from agent.graph import build_graph
+            from agent.state import GraftState
+
+            checkpointer = MemorySaver()
+
+            # Patch graph to stop after planner
+            from langgraph.graph import END, StateGraph
+            from agent.state import GraftState
+            from agent.nodes import reader, planner
+
+            g = StateGraph(GraftState)
+            g.add_node("reader", reader.run)
+            g.add_node("planner", planner.run)
+            g.add_edge("reader", "planner")
+            g.add_edge("planner", END)
+            graph = g.compile(checkpointer=MemorySaver())
+
+            initial: GraftState = {
+                "job_id": "test-graph-001",
+                "repo_path": inp["repo"],
+                "dep_name": dep,
+                "old_version": old_v,
+                "new_version": new_v,
+                "call_graph": [],
+                "dep_diff": "",
+                "migration_guide": "",
+                "migration_plan": [],
+                "breaking_change_count": 0,
+                "affected_file_count": 0,
+                "confidence_score": None,
+                "low_confidence": None,
+                "test_specs": [],
+                "baseline_result": {"passed": False, "total": 0, "failed_names": [], "errors": [], "stdout": "", "duration_ms": 0},
+                "test_results_current": {"passed": False, "total": 0, "failed_names": [], "errors": [], "stdout": "", "duration_ms": 0},
+                "current_diff": {},
+                "attempt_traces": [],
+                "retry_count": 0,
+                "status": "pending",
+                "pr_body": None,
+                "pr_url": None,
+                "messages": [],
+            }
+
+            self._log("  ↳ graph.ainvoke(initial_state) …")
+            config = {"configurable": {"thread_id": "test-graph-001"}}
+            final = asyncio.run(graph.ainvoke(initial, config=config))
+
+            self._log(f"  [green]✓ status          : {final.get('status')}[/green]")
+            self._log(f"  [green]✓ dep_diff         : {len(final.get('dep_diff',''))} chars[/green]")
+            self._log(f"  [green]✓ migration_plan   : {len(final.get('migration_plan',[]))} steps[/green]")
+            self._log(f"  [green]✓ confidence_score : {final.get('confidence_score')}[/green]")
+            self._log(f"  [green]✓ low_confidence   : {final.get('low_confidence')}[/green]")
+
+            self._log("[bold green]  GRAPH DRY-RUN PASS ✓[/bold green]")
+            self._status("Agent/Graph: PASS ✓")
+
+        except Exception:
+            tb = traceback.format_exc()
+            self._log("[bold red]  GRAPH DRY-RUN FAIL ✗[/bold red]")
+            for ln in tb.splitlines():
+                self._log(f"  [red]{ln}[/red]")
+            self._status("Agent/Graph: FAIL ✗ — see log")
         finally:
             self._set_busy(False)
 
