@@ -5,3 +5,10 @@
 __pycache__/
 .worktrees/
 .pytest_cache/
+.nx/installation
+.nx/cache
+.nx/workspace-data
+.nx/self-healing
+.nx/polygraph
+.claude/worktrees
+.claude/settings.local.json
